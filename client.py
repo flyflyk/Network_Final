@@ -1,78 +1,37 @@
 import socket
 import struct
 import time
-import threading
 
 PROXY_IP = "10.10.2.XXX" # <-- Proxy server IP
 PROXY_PORT = 5405
 TOTAL_PACKETS = 100
-
-acked_packets = set()
-lock = threading.Lock()
-running = True
-
-def listen_acks(sock):
-    global acked_packets, running
-    print("ACK Listener started... waiting for data...")
-    
-    while running:
-        try:
-            sock.settimeout(1.0)
-            data, _ = sock.recvfrom(1024)
-            
-            if len(data) >= 4:
-                ack_seq = struct.unpack('!I', data[:4])[0]
-                with lock:
-                    if ack_seq not in acked_packets:
-                        acked_packets.add(ack_seq)
-                        print(f"[ACK] Recv ACK for {ack_seq}")
-            else:
-                print(f"[Warning] Received packet too small: {data}")
-
-        except socket.timeout:
-            continue
-        except Exception as e:
-            if running:
-                print(f"Listener Error: {e}")
+REDUNDANCY_COUNT = 8 
 
 def run_client():
-    global running
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("0.0.0.0", 55555))
-    print(f"Client bound to port 55555")
-    listener = threading.Thread(target=listen_acks, args=(sock,))
-    listener.start()
     
     print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
-    round_cnt = 1
-    
-    while len(acked_packets) < TOTAL_PACKETS:
-        with lock:
-            missing = [i for i in range(1, TOTAL_PACKETS + 1) if i not in acked_packets]
-        
-        if not missing:
-            break
+    print("Sending packets 1 to 100...")
 
-        print(f"\n--- Round {round_cnt}: Sending {len(missing)} packets ---")
-        burst_cnt = 4 if round_cnt == 1 else 2
-        
-        for seq_id in missing:
-            header = struct.pack('!I', seq_id)
-            payload = f"Data_for_{seq_id}".encode('utf-8')
-            packet = header + payload
-            for _ in range(burst_cnt):
-                sock.sendto(packet, (PROXY_IP, PROXY_PORT))
-                time.sleep(0.001)
+    start_time = time.time()
 
-        print(f"Waiting for ACKs... Current Progress: {len(acked_packets)}/100")
+    for seq_id in range(1, TOTAL_PACKETS + 1):
         
-        time.sleep(3.0)
-        round_cnt += 1
+        # Construct packet
+        header = struct.pack('!I', seq_id)
+        payload = f"Data_for_{seq_id}".encode('utf-8')
+        packet = header + payload
+        
+        # Send multiple times
+        for _ in range(REDUNDANCY_COUNT):
+            sock.sendto(packet, (PROXY_IP, PROXY_PORT))
+            time.sleep(0.002)
+            
+        if seq_id % 10 == 0:
+            print(f"Sent packets up to {seq_id}...")
 
-    print("\n[Client] All packets acknowledged!")
-    running = False
-    listener.join()
+    duration = time.time() - start_time
+    print(f"\n[Client] Finished sending. Duration: {duration:.2f}s")
     sock.close()
 
 if __name__ == "__main__":
