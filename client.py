@@ -5,33 +5,36 @@ import time
 PROXY_IP = "10.10.2.XXX" # <-- Proxy server IP
 PROXY_PORT = 5405
 TOTAL_PACKETS = 100
-REDUNDANCY_COUNT = 8 
+TOTAL_ROUNDS = 8 
 
 def run_client():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    
     print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
-    print("Sending packets 1 to 100...")
-
-    start_time = time.time()
-
+    
+    # Pre-generate packets
+    packets = []
     for seq_id in range(1, TOTAL_PACKETS + 1):
-        
-        # Construct packet
         header = struct.pack('!I', seq_id)
         payload = f"Data_for_{seq_id}".encode('utf-8')
-        packet = header + payload
+        packets.append(header + payload)
+    
+    start_time = time.time()
+
+    # Interleaved sending
+    for round_idx in range(1, TOTAL_ROUNDS + 1):
+        print(f"Sending Round {round_idx}/{TOTAL_ROUNDS}...")
         
-        # Send multiple times
-        for _ in range(REDUNDANCY_COUNT):
+        for packet in packets:
             sock.sendto(packet, (PROXY_IP, PROXY_PORT))
-            time.sleep(0.002)
             
-        if seq_id % 10 == 0:
-            print(f"Sent packets up to {seq_id}...")
+            # Traffic shaping
+            if round_idx == 1:
+                time.sleep(0.002) 
+            else:
+                time.sleep(0.0005)
 
     duration = time.time() - start_time
-    print(f"\n[Client] Finished sending. Duration: {duration:.2f}s")
+    print(f"\n[Client] Finished. Sent {TOTAL_PACKETS * TOTAL_ROUNDS} packets in {duration:.3f}s")
     sock.close()
 
 if __name__ == "__main__":

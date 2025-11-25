@@ -1,5 +1,6 @@
 import socket
 import struct
+import time
 
 BIND_IP = "0.0.0.0"
 BIND_PORT = 5405
@@ -7,59 +8,36 @@ TOTAL_PACKETS = 100
 
 def run_server():
     buffer = {}
-    has_started = False
+    first_packet_time = None
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((BIND_IP, BIND_PORT))
     print(f"Server listening on {BIND_IP}:{BIND_PORT}")
-    print("Mode: Passive Collection (Waiting for data...)")
-    
-    while True:
-        try:
-            sock.settimeout(3.0) 
-            data, _ = sock.recvfrom(1024)
-            has_started = True
-            
-            # Resolve seq ID
-            seq_id = struct.unpack('!I', data[:4])[0]
-            payload = data[4:].decode('utf-8')
-            
-            # Save in buffer
-            if seq_id not in buffer:
-                buffer[seq_id] = payload
-                print(f"[Recv] New Seq: {seq_id} (Count: {len(buffer)}/{TOTAL_PACKETS})")
-            
-            if len(buffer) >= TOTAL_PACKETS:
-                print("All 100 packets collected!")
-                break
 
-        except socket.timeout:
-            if has_started:
-                print("\nNo data for 3 seconds. Assuming transmission complete.")
-                break
-            else:
-                continue
+    while len(buffer) < TOTAL_PACKETS:
+        try:
+            data, _ = sock.recvfrom(1024)
+            if first_packet_time is None:
+                first_packet_time = time.time()
+            
+            seq_id = struct.unpack('!I', data[:4])[0]
+            
+            # Process only new packets
+            if seq_id not in buffer:
+                payload = data[4:].decode('utf-8')
+                buffer[seq_id] = payload
+            
         except Exception as e:
             print(f"Error: {e}")
 
-
-    print("\n=== Final Result (Sorted) ===")    
-    # Check loss
-    missing_packets = []
-    for i in range(1, TOTAL_PACKETS + 1):
-        if i not in buffer:
-            missing_packets.append(i)
-            
-    if missing_packets:
-        print(f"Warning: Missing {len(missing_packets)} packets: {missing_packets}")
-    else:
-        print("Success: No packet loss!")
-
+    total_time = time.time() - first_packet_time
+    print(f"\n\n=== Success! Collected all 100 packets in {total_time:.3f}s ===")
+    
     # Sort
     sorted_keys = sorted(buffer.keys())
     for k in sorted_keys:
         print(f"Packet {k}: {buffer[k]}")
         
-    print("\nServer shutting down.")
+    print("Server shutting down immediately.")
 
 if __name__ == "__main__":
     run_server()
