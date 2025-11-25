@@ -23,6 +23,7 @@ def get_neighbors(seed):
 
 def run_client():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(3.0) 
     print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
     
     source_blocks = {}
@@ -31,35 +32,35 @@ def run_client():
         payload = raw_str.encode('utf-8').ljust(MAX_PAYLOAD_LEN, b'\x00')
         source_blocks[seq_id] = payload
 
-    start_time = time.time()
     udp_packets_sent = 0
 
-    def send_packed(packets_list, batch_cnt):
+    def send_packed(packets_list, batch_count):
         nonlocal udp_packets_sent
-        for i in range(0, len(packets_list), batch_cnt):
-            batch = packets_list[i : i + batch_cnt]
+        for i in range(0, len(packets_list), batch_count):
+            batch = packets_list[i : i + batch_count]
             udp_payload = b''.join(batch)
             sock.sendto(udp_payload, (PROXY_IP, PROXY_PORT))
             udp_packets_sent += 1
+            time.sleep(0.002)
 
-    # Systematic (Raw)
+    # Prepare Systematic packets
     sys_chunks = []
     for seq_id in range(1, TOTAL_PACKETS + 1):
         header = f"{seq_id:05d}".encode('utf-8')
         sys_chunks.append(header + source_blocks[seq_id])
-    
-    print("Sending Systematic...")
-    send_packed(sys_chunks, batch_cnt=30)
-    random.shuffle(sys_chunks)
-    send_packed(sys_chunks, batch_cnt=30)
-    random.shuffle(sys_chunks)
-    send_packed(sys_chunks, batch_cnt=30)
 
-    # Fountain Repair (Base64)
+    start_time = time.time()
+
+    print("Sending Systematic...")
+    send_packed(sys_chunks, batch_count=30)
+    random.shuffle(sys_chunks)
+    send_packed(sys_chunks, batch_count=30)
+    random.shuffle(sys_chunks)
+    send_packed(sys_chunks, batch_count=30)
+
     print("Sending Fountain Repair...")
     repair_chunks = []
     base_seed = 10001
-    
     for i in range(120):
         seed = base_seed + i
         neighbors = get_neighbors(seed)
@@ -68,17 +69,26 @@ def run_client():
             mixed = fast_xor(mixed, source_blocks[n_id])
         
         safe_payload = base64.b64encode(mixed)
-        
-        # Header (5 bytes) + Base64 Payload (44 bytes) = 49 bytes
         header = f"{seed:05d}".encode('utf-8')
         repair_chunks.append(header + safe_payload)
         
-    # Chunk size = 49 bytes.
-    # UDP packet = 49 * 25 = 1225 bytes < MTU
-    send_packed(repair_chunks, batch_cnt=25)
+    send_packed(repair_chunks, batch_count=25)
 
-    duration = time.time() - start_time
-    print(f"\n[Client] Finished. Sent {udp_packets_sent} UDP packets in {(duration * 1000):.3f} ms")
+    print("Data sent. Waiting for Server FIN signal...")
+    try:
+        while True:
+            data, _ = sock.recvfrom(1024)
+            if b'FIN' in data or data.startswith(b'00000'):
+                end_time = time.time()
+                total_ms = (end_time - start_time) * 1000
+                print(f"\n[Success] Server ack completion!")
+                print(f"Total End-to-End Latency: {total_ms:.3f} ms")
+                break
+    except socket.timeout:
+        print("\n[Warning] Timed out waiting for Server FIN.")
+        send_only_ms = (time.time() - start_time) * 1000
+        print(f"Sending Duration (Client side only): {send_only_ms:.3f} ms")
+
     sock.close()
 
 if __name__ == "__main__":

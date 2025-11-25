@@ -27,7 +27,8 @@ def get_neighbors(seed):
 def run_server():
     restored_blocks = {}
     droplets = [] 
-    first_packet_time = None
+    first_packet_arrival = None
+    last_addr = None
     
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
@@ -37,11 +38,12 @@ def run_server():
     
     while len(restored_blocks) < TOTAL_PACKETS:
         try:
-            sock.settimeout(2.0)
-            data, _ = sock.recvfrom(4096) 
+            sock.settimeout(5.0)
+            data, addr = sock.recvfrom(4096) 
+            last_addr = addr
             
-            if first_packet_time is None:
-                first_packet_time = time.time()
+            if first_packet_arrival is None:
+                first_packet_arrival = time.time()
             
             offset = 0
             while offset + LEN_HEADER <= len(data):
@@ -60,9 +62,9 @@ def run_server():
                         payload = data[offset : offset + LEN_RAW_PAYLOAD]
                         offset += LEN_RAW_PAYLOAD
                         neighbors = {seed}
-                    else:
+                    else: 
                         break 
-                
+
                 # Base64
                 else:
                     if offset + LEN_B64_PAYLOAD <= len(data):
@@ -70,15 +72,13 @@ def run_server():
                         offset += LEN_B64_PAYLOAD
                         try:
                             payload = base64.b64decode(b64_data)
-                        except:
-                            continue
+                        except: continue
                         neighbors = set(get_neighbors(seed))
-                    else:
-                        break
+                    else: break
 
-                if payload is None:
-                    continue
+                if payload is None: continue
 
+                # Decode
                 for known_id in list(neighbors):
                     if known_id in restored_blocks:
                         payload = fast_xor(payload, restored_blocks[known_id])
@@ -112,16 +112,27 @@ def run_server():
         except Exception as e:
             print(f"Error: {e}")
 
-    total_time = time.time() - first_packet_time
-    print(f"\n\n=== Success! {(total_time * 1000):.3f} ms ===")
+    print("\nCollection Complete. Sending FIN signal back to Client...")
+    if last_addr:
+        fin_header = f"{0:05d}".encode('utf-8')
+        fin_payload = b'FIN' * 5
+        fin_packet = fin_header + fin_payload
+        
+        for _ in range(10):
+            sock.sendto(fin_packet, last_addr)
+            time.sleep(0.001)
+
+    server_duration = (time.time() - first_packet_arrival) * 1000
+    print(f"Server Processing Duration: {server_duration:.3f} ms")
     
+    # Sort
     sorted_keys = sorted(restored_blocks.keys())
     for k in sorted_keys:
         try:
             text = restored_blocks[k].rstrip(b'\x00').decode('utf-8')
             print(f"Packet {k}: {text}")
-        except:
-            print(f"Packet {k}: [Decode Error]")
+        except: 
+            pass
         
     print("Server shutting down.")
 
