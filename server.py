@@ -11,15 +11,17 @@ def run_server():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((BIND_IP, BIND_PORT))
     print(f"Server listening on {BIND_IP}:{BIND_PORT}")
-    
-    # Receive loop
+
     while len(buffer) < TOTAL_PACKETS:
         try:
             data, addr = sock.recvfrom(1024)
             
-            # Resolve packet
             seq_id = struct.unpack('!I', data[:4])[0]
             payload = data[4:].decode('utf-8')
+            if seq_id % 20 == 0:
+                print(f"[Debug] Recv Seq {seq_id} from {addr}. Sending ACK back to {addr}...")
+            
+            # Send ACK back to sender
             ack_packet = struct.pack('!I', seq_id)
             sock.sendto(ack_packet, addr)
             
@@ -30,21 +32,23 @@ def run_server():
         except Exception as e:
             print(f"Error: {e}")
 
-    # Display
     print("\n=== Collection Complete. Sorting... ===")
     sorted_keys = sorted(buffer.keys())
     for k in sorted_keys:
         print(f"Packet {k}: {buffer[k]}")
-    print("Server will stay alive for 10 seconds to handle lagging packets...")
+        
+    print("\n=== Keeping alive for 20 seconds for debugging ===")
+    print("If Client is still retrying, we will see it below:")
     
     start_wait = time.time()
     sock.settimeout(1.0)
     
-    # ACK-Reflector loop
-    while time.time() - start_wait < 10.0:
+    while time.time() - start_wait < 20.0:
         try:
             data, addr = sock.recvfrom(1024)
             seq_id = struct.unpack('!I', data[:4])[0]
+            
+            print(f"[Late Packet] Recv Seq {seq_id} from {addr}. Resending ACK...")
             ack_packet = struct.pack('!I', seq_id)
             sock.sendto(ack_packet, addr)
         except socket.timeout:

@@ -13,8 +13,8 @@ running = True
 
 def listen_acks(sock):
     global acked_packets, running
+    print("ACK Listener started... waiting for data...")
     
-    print("ACK Listener started...")
     while running:
         try:
             sock.settimeout(1.0)
@@ -25,6 +25,10 @@ def listen_acks(sock):
                 with lock:
                     if ack_seq not in acked_packets:
                         acked_packets.add(ack_seq)
+                        print(f"[ACK] Recv ACK for {ack_seq}")
+            else:
+                print(f"[Warning] Received packet too small: {data}")
+
         except socket.timeout:
             continue
         except Exception as e:
@@ -35,8 +39,11 @@ def run_client():
     global running
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("0.0.0.0", 55555))
+    print(f"Client bound to port 55555")
     listener = threading.Thread(target=listen_acks, args=(sock,))
     listener.start()
+    
     print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
     round_cnt = 1
     
@@ -48,7 +55,7 @@ def run_client():
             break
 
         print(f"\n--- Round {round_cnt}: Sending {len(missing)} packets ---")
-        burst_cnt = 4 if round_cnt == 1 else 3
+        burst_cnt = 4 if round_cnt == 1 else 2
         
         for seq_id in missing:
             header = struct.pack('!I', seq_id)
@@ -56,10 +63,11 @@ def run_client():
             packet = header + payload
             for _ in range(burst_cnt):
                 sock.sendto(packet, (PROXY_IP, PROXY_PORT))
-                time.sleep(0.0005) 
+                time.sleep(0.001)
 
         print(f"Waiting for ACKs... Current Progress: {len(acked_packets)}/100")
-        time.sleep(2.5)
+        
+        time.sleep(3.0)
         round_cnt += 1
 
     print("\n[Client] All packets acknowledged!")
