@@ -88,10 +88,11 @@ def run_server():
     total_time = time.time() - first_packet_time
     print(f"\n\n=== Success! {total_time:.3f}s ===")
     
+    # Sort
     sorted_keys = sorted(restored_blocks.keys())
     for k in sorted_keys:
-        print(f"Packet {k}: {restored_blocks[k].rstrip(b'\x00').decode('utf-8')}")
-    print("Server shutting down.")
+        text = restored_blocks[k].rstrip(b'\x00').decode('utf-8')
+        print(f"Packet {k}: {text}")
 
 if __name__ == "__main__":
     run_server()
