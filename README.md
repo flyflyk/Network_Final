@@ -12,6 +12,7 @@
 2.  **Start Proxy**
     Run on the second machine:
     ```console
+    chmod +x final_proxy
     ./final_proxy
     Server IP: <SERVER_IP_ADDRESS>
     ```
