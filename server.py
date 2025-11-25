@@ -86,7 +86,7 @@ def run_server():
             print(f"Error: {e}")
 
     total_time = time.time() - first_packet_time
-    print(f"\n\n=== Success! {total_time:.3f}s ===")
+    print(f"\n\n=== Success! {(total_time * 1000):.3f}ms ===")
     
     # Sort
     sorted_keys = sorted(restored_blocks.keys())

@@ -80,7 +80,7 @@ def run_client():
     send_packed(repair_chunks)
 
     duration = time.time() - start_time
-    print(f"\n[Client] Finished. Sent {udp_packets_sent} UDP packets in {duration:.3f}s")
+    print(f"\n[Client] Finished. Sent {udp_packets_sent} UDP packets in {(duration * 1000):.3f}ms")
     sock.close()
 
 if __name__ == "__main__":
