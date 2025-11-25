@@ -23,7 +23,7 @@ def get_neighbors(seed):
 
 def run_client():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(3.0) 
+    sock.settimeout(0.5) 
     print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
     
     source_blocks = {}
@@ -74,17 +74,38 @@ def run_client():
         
     send_packed(repair_chunks, batch_count=25)
 
-    print("Data sent. Waiting for Server FIN signal...")
-    try:
-        while True:
-            data, _ = sock.recvfrom(1024)
-            if b'FIN' in data or data.startswith(b'00000'):
-                end_time = time.time()
-                total_ms = (end_time - start_time) * 1000
-                print(f"\n[Success] Server ack completion!")
-                print(f"Total End-to-End Latency: {total_ms:.3f} ms")
+    print("Data sent. Polling Server for FIN signal...")
+    ping_packet = f"{0:05d}".encode('utf-8') + b'PING' * 5
+    received_fin = False
+    
+    for _ in range(20):
+        try:
+            # Ping
+            sock.sendto(ping_packet, (PROXY_IP, PROXY_PORT))
+            
+            # Capture FIN
+            start_poll = time.time()
+            while time.time() - start_poll < 0.5:
+                try:
+                    data, _ = sock.recvfrom(1024)
+                    if b'FIN' in data or data.startswith(b'00000'):
+                        end_time = time.time()
+                        total_ms = (end_time - start_time) * 1000
+                        print(f"\n[Success] Server ack completion!")
+                        print(f"Total End-to-End Latency: {total_ms:.3f} ms")
+                        received_fin = True
+                        break
+                except socket.timeout:
+                    break
+            
+            if received_fin:
                 break
-    except socket.timeout:
+                
+        except Exception as e:
+            print(f"Error: {e}")
+            break
+
+    if not received_fin:
         print("\n[Warning] Timed out waiting for Server FIN.")
         send_only_ms = (time.time() - start_time) * 1000
         print(f"Sending Duration (Client side only): {send_only_ms:.3f} ms")

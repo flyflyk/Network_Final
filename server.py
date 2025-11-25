@@ -53,9 +53,13 @@ def run_server():
                     offset += LEN_HEADER
                 except ValueError:
                     break
+                
+                # Ping filter
+                if seed == 0:
+                    continue
 
                 payload = None
-                
+
                 # Raw
                 if 1 <= seed <= TOTAL_PACKETS:
                     if offset + LEN_RAW_PAYLOAD <= len(data):
@@ -112,20 +116,34 @@ def run_server():
         except Exception as e:
             print(f"Error: {e}")
 
-    print("\nCollection Complete. Sending FIN signal back to Client...")
-    if last_addr:
-        fin_header = f"{0:05d}".encode('utf-8')
-        fin_payload = b'FIN' * 5
-        fin_packet = fin_header + fin_payload
-        
-        for _ in range(10):
-            sock.sendto(fin_packet, last_addr)
-            time.sleep(0.001)
-
+    # Sum up duration
     server_duration = (time.time() - first_packet_arrival) * 1000
-    print(f"Server Processing Duration: {server_duration:.3f} ms")
+    print(f"\nCollection Complete in {server_duration:.3f} ms.")
+    print("Entering Keep-Alive Mode (Responding to PINGs)...")
+
+    # FIN Packet
+    fin_header = f"{0:05d}".encode('utf-8')
+    fin_payload = b'FIN' * 5
+    fin_packet = fin_header + fin_payload
+
+    if last_addr:
+        for _ in range(5):
+            sock.sendto(fin_packet, last_addr)
+            time.sleep(0.002)
+
+    start_wait = time.time()
+    sock.settimeout(1.0)
     
-    # Sort
+    while time.time() - start_wait < 10.0:
+        try:
+            data, addr = sock.recvfrom(1024)
+            sock.sendto(fin_packet, addr)
+        except socket.timeout:
+            continue
+        except Exception:
+            pass
+            
+    print("Server shutting down.")
     sorted_keys = sorted(restored_blocks.keys())
     for k in sorted_keys:
         try:
@@ -133,8 +151,6 @@ def run_server():
             print(f"Packet {k}: {text}")
         except: 
             pass
-        
-    print("Server shutting down.")
 
 if __name__ == "__main__":
     run_server()
