@@ -2,12 +2,14 @@ import socket
 import struct
 import time
 import random
+import base64
 
 BIND_IP = "0.0.0.0"
 BIND_PORT = 5405
 TOTAL_PACKETS = 100
 MAX_PAYLOAD_LEN = 32
-CHUNK_SIZE = 4 + MAX_PAYLOAD_LEN
+LEN_RAW = 32
+LEN_B64 = 44
 
 def fast_xor(b1, b2):
     parts1 = struct.unpack('!QQQQ', b1)
@@ -25,6 +27,7 @@ def run_server():
     restored_blocks = {}
     droplets = [] 
     first_packet_time = None
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
     sock.bind((BIND_IP, BIND_PORT))
@@ -34,24 +37,45 @@ def run_server():
     while len(restored_blocks) < TOTAL_PACKETS:
         try:
             sock.settimeout(2.0)
-            data, _ = sock.recvfrom(4096)
+            data, _ = sock.recvfrom(4096) 
             
             if first_packet_time is None:
                 first_packet_time = time.time()
             
-            # Unpack
             offset = 0
-            while offset + CHUNK_SIZE <= len(data):
-                chunk = data[offset : offset + CHUNK_SIZE]
-                seed = struct.unpack('!I', chunk[:4])[0]
-                payload = chunk[4:]
-                offset += CHUNK_SIZE
-                if 1 <= seed <= TOTAL_PACKETS:
-                    neighbors = {seed}
-                else:
-                    neighbors = set(get_neighbors(seed))
+            while offset + 4 <= len(data):
+                seed = struct.unpack('!I', data[offset : offset + 4])[0]
+                offset += 4
+                payload = None
                 
-                # Fast peeling
+                # Raw
+                if 1 <= seed <= TOTAL_PACKETS:
+                    if offset + LEN_RAW <= len(data):
+                        payload = data[offset : offset + LEN_RAW]
+                        offset += LEN_RAW
+                        
+                        neighbors = {seed}
+                    else:
+                        break
+
+                # Base64
+                else:
+                    if offset + LEN_B64 <= len(data):
+                        b64_data = data[offset : offset + LEN_B64]
+                        offset += LEN_B64
+                        
+                        try:
+                            payload = base64.b64decode(b64_data)
+                        except:
+                            continue
+                            
+                        neighbors = set(get_neighbors(seed))
+                    else:
+                        break
+
+                if payload is None:
+                    continue
+
                 for known_id in list(neighbors):
                     if known_id in restored_blocks:
                         payload = fast_xor(payload, restored_blocks[known_id])
@@ -86,13 +110,17 @@ def run_server():
             print(f"Error: {e}")
 
     total_time = time.time() - first_packet_time
-    print(f"\n\n=== Success! {(total_time * 1000):.3f}ms ===")
+    print(f"\n\n=== Success! {(total_time * 1000):.3f} ms ===")
     
-    # Sort
     sorted_keys = sorted(restored_blocks.keys())
     for k in sorted_keys:
-        text = restored_blocks[k].rstrip(b'\x00').decode('utf-8')
-        print(f"Packet {k}: {text}")
+        try:
+            text = restored_blocks[k].rstrip(b'\x00').decode('utf-8')
+            print(f"Packet {k}: {text}")
+        except:
+            print(f"Packet {k}: [Decode Error]")
+        
+    print("Server shutting down.")
 
 if __name__ == "__main__":
     run_server()
