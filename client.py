@@ -8,8 +8,6 @@ PROXY_IP = "10.10.2.XXX" # <-- Proxy server IP
 PROXY_PORT = 5405
 TOTAL_PACKETS = 100
 MAX_PAYLOAD_LEN = 32
-AGGREGATION_SIZE = 30
-BATCH_SIZE = 20 
 
 def fast_xor(b1, b2):
     parts1 = struct.unpack('!QQQQ', b1)
@@ -36,28 +34,28 @@ def run_client():
     start_time = time.time()
     udp_packets_sent = 0
 
-    def send_packed(chunks_list):
+    def send_packed(packets_list, batch_cnt):
         nonlocal udp_packets_sent
-        for i in range(0, len(chunks_list), AGGREGATION_SIZE):
-            batch = chunks_list[i : i + AGGREGATION_SIZE]
+        for i in range(0, len(packets_list), batch_cnt):
+            batch = packets_list[i : i + batch_cnt]
             udp_payload = b''.join(batch)
             sock.sendto(udp_payload, (PROXY_IP, PROXY_PORT))
             udp_packets_sent += 1
 
-    # Systematic packets
+    # Systematic (Raw)
     sys_chunks = []
     for seq_id in range(1, TOTAL_PACKETS + 1):
-        header = struct.pack('!I', seq_id)
+        header = f"{seq_id:05d}".encode('utf-8')
         sys_chunks.append(header + source_blocks[seq_id])
     
     print("Sending Systematic...")
-    send_packed(sys_chunks)
+    send_packed(sys_chunks, batch_cnt=30)
     random.shuffle(sys_chunks)
-    send_packed(sys_chunks)
+    send_packed(sys_chunks, batch_cnt=30)
     random.shuffle(sys_chunks)
-    send_packed(sys_chunks)
+    send_packed(sys_chunks, batch_cnt=30)
 
-    # Fountain repair packets
+    # Fountain Repair (Base64)
     print("Sending Fountain Repair...")
     repair_chunks = []
     base_seed = 10001
@@ -68,20 +66,16 @@ def run_client():
         mixed = source_blocks[neighbors[0]]
         for n_id in neighbors[1:]:
             mixed = fast_xor(mixed, source_blocks[n_id])
-
-        safe_payload = base64.b64encode(mixed)
-        repair_chunks.append(struct.pack('!I', seed) + safe_payload)
         
-    def send_repair_packed(chunks_list):
-        nonlocal udp_packets_sent
-        for i in range(0, len(chunks_list), BATCH_SIZE):
-            batch = chunks_list[i : i + BATCH_SIZE]
-            udp_payload = b''.join(batch)
-            sock.sendto(udp_payload, (PROXY_IP, PROXY_PORT))
-            udp_packets_sent += 1
-            time.sleep(0.002)
-
-    send_repair_packed(repair_chunks)
+        safe_payload = base64.b64encode(mixed)
+        
+        # Header (5 bytes) + Base64 Payload (44 bytes) = 49 bytes
+        header = f"{seed:05d}".encode('utf-8')
+        repair_chunks.append(header + safe_payload)
+        
+    # Chunk size = 49 bytes.
+    # UDP packet = 49 * 25 = 1225 bytes < MTU
+    send_packed(repair_chunks, batch_cnt=25)
 
     duration = time.time() - start_time
     print(f"\n[Client] Finished. Sent {udp_packets_sent} UDP packets in {(duration * 1000):.3f} ms")

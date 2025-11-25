@@ -8,8 +8,9 @@ BIND_IP = "0.0.0.0"
 BIND_PORT = 5405
 TOTAL_PACKETS = 100
 MAX_PAYLOAD_LEN = 32
-LEN_RAW = 32
-LEN_B64 = 44
+LEN_HEADER = 5 
+LEN_RAW_PAYLOAD = 32
+LEN_B64_PAYLOAD = 44 
 
 def fast_xor(b1, b2):
     parts1 = struct.unpack('!QQQQ', b1)
@@ -27,7 +28,7 @@ def run_server():
     restored_blocks = {}
     droplets = [] 
     first_packet_time = None
-
+    
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
     sock.bind((BIND_IP, BIND_PORT))
@@ -43,32 +44,34 @@ def run_server():
                 first_packet_time = time.time()
             
             offset = 0
-            while offset + 4 <= len(data):
-                seed = struct.unpack('!I', data[offset : offset + 4])[0]
-                offset += 4
+            while offset + LEN_HEADER <= len(data):
+                try:
+                    seed_str = data[offset : offset + LEN_HEADER]
+                    seed = int(seed_str)
+                    offset += LEN_HEADER
+                except ValueError:
+                    break
+
                 payload = None
                 
                 # Raw
                 if 1 <= seed <= TOTAL_PACKETS:
-                    if offset + LEN_RAW <= len(data):
-                        payload = data[offset : offset + LEN_RAW]
-                        offset += LEN_RAW
-                        
+                    if offset + LEN_RAW_PAYLOAD <= len(data):
+                        payload = data[offset : offset + LEN_RAW_PAYLOAD]
+                        offset += LEN_RAW_PAYLOAD
                         neighbors = {seed}
                     else:
-                        break
-
+                        break 
+                
                 # Base64
                 else:
-                    if offset + LEN_B64 <= len(data):
-                        b64_data = data[offset : offset + LEN_B64]
-                        offset += LEN_B64
-                        
+                    if offset + LEN_B64_PAYLOAD <= len(data):
+                        b64_data = data[offset : offset + LEN_B64_PAYLOAD]
+                        offset += LEN_B64_PAYLOAD
                         try:
                             payload = base64.b64decode(b64_data)
                         except:
                             continue
-                            
                         neighbors = set(get_neighbors(seed))
                     else:
                         break
