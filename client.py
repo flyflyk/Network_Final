@@ -7,7 +7,7 @@ PROXY_IP = "10.10.2.XXX" # <-- Proxy server IP
 PROXY_PORT = 5405
 TOTAL_PACKETS = 100
 MAX_PAYLOAD_LEN = 32
-EXTRA_PACKETS = 120 
+AGGREGATION_SIZE = 30 
 
 def fast_xor(b1, b2):
     parts1 = struct.unpack('!QQQQ', b1)
@@ -24,48 +24,63 @@ def get_neighbors(seed):
 def run_client():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
-    source_blocks = {}
-    packet_cache = {} 
     
+    # Pre-generate source blocks
+    source_blocks = {}
     for seq_id in range(1, TOTAL_PACKETS + 1):
         raw_str = f"Data_for_{seq_id}"
         payload = raw_str.encode('utf-8').ljust(MAX_PAYLOAD_LEN, b'\x00')
         source_blocks[seq_id] = payload
-        header = struct.pack('!I', seq_id)
-        packet_cache[seq_id] = header + payload
-    
-    start_time = time.time()
-    sent_cnt = 0
-    
-    # Systematic (Raw Data)
-    for seq_id in range(1, TOTAL_PACKETS + 1):
-        sock.sendto(packet_cache[seq_id], (PROXY_IP, PROXY_PORT))
-        sent_cnt += 1
-        
-    # Re-send Systematic
-    time.sleep(0.005) 
-    for seq_id in range(1, TOTAL_PACKETS + 1):
-        sock.sendto(packet_cache[seq_id], (PROXY_IP, PROXY_PORT))
-        sent_cnt += 1
 
-    # Fountain Droplets
-    base_seed = 10001 
-    for i in range(EXTRA_PACKETS):
+    start_time = time.time()
+    udp_packets_sent = 0
+
+    def send_packed(chunks_list):
+        nonlocal udp_packets_sent
+        # Batch chunks
+        for i in range(0, len(chunks_list), AGGREGATION_SIZE):
+            batch = chunks_list[i : i + AGGREGATION_SIZE]
+            # Concatenate
+            udp_payload = b''.join(batch)
+            sock.sendto(udp_payload, (PROXY_IP, PROXY_PORT))
+            udp_packets_sent += 1
+
+    # Systematic(raw)
+    sys_chunks = []
+    for seq_id in range(1, TOTAL_PACKETS + 1):
+        header = struct.pack('!I', seq_id)
+        sys_chunks.append(header + source_blocks[seq_id])
+    
+    # Sequentially send
+    print("Sending Systematic...")
+    send_packed(sys_chunks)
+
+    # Shuffled send
+    random.shuffle(sys_chunks)
+    send_packed(sys_chunks)
+    
+    # Re-send shuffled
+    random.shuffle(sys_chunks)
+    send_packed(sys_chunks)
+
+    # Fountain Repair
+    print("Sending Fountain Repair...")
+    repair_chunks = []
+    base_seed = 10001
+    
+    for i in range(120):
         seed = base_seed + i
         neighbors = get_neighbors(seed)
-        mixed_payload = source_blocks[neighbors[0]]
+        mixed = source_blocks[neighbors[0]]
         for n_id in neighbors[1:]:
-            mixed_payload = fast_xor(mixed_payload, source_blocks[n_id])
-            
-        header = struct.pack('!I', seed)
-        sock.sendto(header + mixed_payload, (PROXY_IP, PROXY_PORT))
-        sent_cnt += 1
+            mixed = fast_xor(mixed, source_blocks[n_id])
         
-        if i % 50 == 0:
-            time.sleep(0.001)
+        repair_chunks.append(struct.pack('!I', seed) + mixed)
+        
+    send_packed(repair_chunks)
 
     duration = time.time() - start_time
-    print(f"\n[Client] Finished. Sent {sent_cnt} packets in {duration:.3f}s")
+    print(f"\n[Client] Finished. Sent {udp_packets_sent} UDP packets in {duration:.3f}s")
     sock.close()
 
 if __name__ == "__main__":
