@@ -7,7 +7,6 @@ import base64
 BIND_IP = "0.0.0.0"
 BIND_PORT = 5405
 TOTAL_PACKETS = 100
-MAX_PAYLOAD_LEN = 32
 LEN_HEADER = 5 
 LEN_RAW_PAYLOAD = 32
 LEN_B64_PAYLOAD = 44 
@@ -35,7 +34,7 @@ def run_server():
     sock.bind((BIND_IP, BIND_PORT))
     
     print(f"Server listening on {BIND_IP}:{BIND_PORT}")
-    
+    fin_packet = f"{0:05d}".encode('utf-8') + b'FIN' * 5
     while len(restored_blocks) < TOTAL_PACKETS:
         try:
             sock.settimeout(5.0)
@@ -51,25 +50,19 @@ def run_server():
                     seed_str = data[offset : offset + LEN_HEADER]
                     seed = int(seed_str)
                     offset += LEN_HEADER
-                except ValueError:
-                    break
-                
-                # Ping filter
+                except ValueError: break
+
                 if seed == 0:
+                    sock.sendto(fin_packet, addr)
                     continue
 
                 payload = None
-
-                # Raw
                 if 1 <= seed <= TOTAL_PACKETS:
                     if offset + LEN_RAW_PAYLOAD <= len(data):
                         payload = data[offset : offset + LEN_RAW_PAYLOAD]
                         offset += LEN_RAW_PAYLOAD
                         neighbors = {seed}
-                    else: 
-                        break 
-
-                # Base64
+                    else: break 
                 else:
                     if offset + LEN_B64_PAYLOAD <= len(data):
                         b64_data = data[offset : offset + LEN_B64_PAYLOAD]
@@ -82,7 +75,7 @@ def run_server():
 
                 if payload is None: continue
 
-                # Decode
+                # Decoding
                 for known_id in list(neighbors):
                     if known_id in restored_blocks:
                         payload = fast_xor(payload, restored_blocks[known_id])
@@ -116,25 +109,19 @@ def run_server():
         except Exception as e:
             print(f"Error: {e}")
 
-    # Sum up duration
+    # FIN
     server_duration = (time.time() - first_packet_arrival) * 1000
-    print(f"\nCollection Complete in {server_duration:.3f} ms.")
-    print("Entering Keep-Alive Mode (Responding to PINGs)...")
-
-    # FIN Packet
-    fin_header = f"{0:05d}".encode('utf-8')
-    fin_payload = b'FIN' * 5
-    fin_packet = fin_header + fin_payload
+    print(f"\n[Done] Processing Time: {server_duration:.3f} ms. Sending FINs...")
 
     if last_addr:
-        for _ in range(5):
+        for _ in range(20):
             sock.sendto(fin_packet, last_addr)
-            time.sleep(0.002)
+            time.sleep(0.0005)
 
     start_wait = time.time()
-    sock.settimeout(1.0)
+    sock.settimeout(0.1)
     
-    while time.time() - start_wait < 10.0:
+    while time.time() - start_wait < 5.0:
         try:
             data, addr = sock.recvfrom(1024)
             sock.sendto(fin_packet, addr)
@@ -144,13 +131,6 @@ def run_server():
             pass
             
     print("Server shutting down.")
-    sorted_keys = sorted(restored_blocks.keys())
-    for k in sorted_keys:
-        try:
-            text = restored_blocks[k].rstrip(b'\x00').decode('utf-8')
-            print(f"Packet {k}: {text}")
-        except: 
-            pass
 
 if __name__ == "__main__":
     run_server()

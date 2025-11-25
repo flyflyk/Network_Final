@@ -23,7 +23,7 @@ def get_neighbors(seed):
 
 def run_client():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(0.5) 
+    sock.settimeout(0.1)
     print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
     
     source_blocks = {}
@@ -43,7 +43,6 @@ def run_client():
             udp_packets_sent += 1
             time.sleep(0.002)
 
-    # Prepare Systematic packets
     sys_chunks = []
     for seq_id in range(1, TOTAL_PACKETS + 1):
         header = f"{seq_id:05d}".encode('utf-8')
@@ -51,14 +50,15 @@ def run_client():
 
     start_time = time.time()
 
-    print("Sending Systematic...")
+    # Systematic Send
+    print("Sending Data...")
     send_packed(sys_chunks, batch_count=30)
     random.shuffle(sys_chunks)
     send_packed(sys_chunks, batch_count=30)
     random.shuffle(sys_chunks)
     send_packed(sys_chunks, batch_count=30)
 
-    print("Sending Fountain Repair...")
+    # Fountain Repair
     repair_chunks = []
     base_seed = 10001
     for i in range(120):
@@ -74,41 +74,35 @@ def run_client():
         
     send_packed(repair_chunks, batch_count=25)
 
-    print("Data sent. Polling Server for FIN signal...")
+    print("Polling for FIN...")
     ping_packet = f"{0:05d}".encode('utf-8') + b'PING' * 5
     received_fin = False
+    for _ in range(5):
+        sock.sendto(ping_packet, (PROXY_IP, PROXY_PORT))
     
-    for _ in range(20):
+    for _ in range(100): # 5 sec
         try:
-            # Ping
             sock.sendto(ping_packet, (PROXY_IP, PROXY_PORT))
             
-            # Capture FIN
             start_poll = time.time()
-            while time.time() - start_poll < 0.5:
-                try:
-                    data, _ = sock.recvfrom(1024)
-                    if b'FIN' in data or data.startswith(b'00000'):
-                        end_time = time.time()
-                        total_ms = (end_time - start_time) * 1000
-                        print(f"\n[Success] Server ack completion!")
-                        print(f"Total End-to-End Latency: {total_ms:.3f} ms")
-                        received_fin = True
-                        break
-                except socket.timeout:
+            while time.time() - start_poll < 0.05: 
+                data, _ = sock.recvfrom(1024)
+                if b'FIN' in data or data.startswith(b'00000'):
+                    end_time = time.time()
+                    total_ms = (end_time - start_time) * 1000
+                    print(f"\n[Success] Finished!")
+                    print(f"Total End-to-End Latency: {total_ms:.3f} ms")
+                    received_fin = True
                     break
-            
-            if received_fin:
-                break
-                
-        except Exception as e:
-            print(f"Error: {e}")
-            break
+            if received_fin: break
+        except socket.timeout:
+            continue
+        except Exception:
+            pass
 
     if not received_fin:
-        print("\n[Warning] Timed out waiting for Server FIN.")
-        send_only_ms = (time.time() - start_time) * 1000
-        print(f"Sending Duration (Client side only): {send_only_ms:.3f} ms")
+        print("\n[Warning] No FIN received.")
+        print(f"Send Duration: {(time.time() - start_time)*1000:.3f} ms")
 
     sock.close()
 
