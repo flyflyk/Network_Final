@@ -12,14 +12,14 @@ def run_client():
     try:
         client_socket.bind(('0.0.0.0', CLIENT_PORT))
     except OSError:
-        print(f"[Error] Port {CLIENT_PORT} is busy. Please close other processes using it.")
+        print(f"[Error] Port {CLIENT_PORT} is busy.")
         return
 
-    print(f"[Client] Sending to Proxy at {PROXY_IP}:{PROXY_PORT} from Port {CLIENT_PORT}")
+    client_socket.setblocking(False)
 
-    # Format: seq|timestamp|data
-    packets_data = [f"Data_Packet_{i}" for i in range(TOTAL_PACKETS)]
-    
+    print(f"[Client] Sending to Proxy at {PROXY_IP}:{PROXY_PORT}")
+
+    packets_data = [f"Data_{i}" for i in range(TOTAL_PACKETS)]
     acked_seqs = set()
     start_time = time.time()
     
@@ -29,28 +29,27 @@ def run_client():
                 msg = f"{seq}|{start_time}|{packets_data[seq]}"
                 try:
                     client_socket.sendto(msg.encode('utf-8'), (PROXY_IP, PROXY_PORT))
-                except OSError:
-                    pass
+                except BlockingIOError:
+                    pass 
+        
 
-        start_wait = time.time()
-        while time.time() - start_wait < 0.05:
-            ready = select.select([client_socket], [], [], 0.01)
-            if ready[0]:
-                try:
-                    data, _ = client_socket.recvfrom(1024)
+        ready = select.select([client_socket], [], [], 0.05)
+        if ready[0]:
+            try:
+                while True:
+                    data, _ = client_socket.recvfrom(4096)
                     ack_msg = data.decode('utf-8')
                     if ack_msg.startswith("ACK|"):
                         ack_seq = int(ack_msg.split('|')[1])
                         acked_seqs.add(ack_seq)
-                except Exception:
-                    pass
-            
-            if len(acked_seqs) == TOTAL_PACKETS:
-                break
+            except BlockingIOError:
+                pass
+            except Exception:
+                pass
         
-        print(f"\r[Client] Progress: {len(acked_seqs)}/{TOTAL_PACKETS} packets acknowledged...", end="")
+        print(f"\r[Client] Progress: {len(acked_seqs)}/{TOTAL_PACKETS}", end="")
 
-    print(f"\n[Client] Finished. All {TOTAL_PACKETS} packets acknowledged.")
+    print(f"\n[Client] Success! All packets acknowledged.")
     client_socket.close()
 
 if __name__ == "__main__":
