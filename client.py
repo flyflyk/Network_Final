@@ -1,81 +1,57 @@
 import socket
 import time
-import random
-import base64
+import select
 
-PROXY_IP = "10.10.2.XXX" # <-- Proxy server IP
+PROXY_IP = '20.243.17.90'
 PROXY_PORT = 5405
+CLIENT_PORT = 5405
 TOTAL_PACKETS = 100
-MAX_PAYLOAD_LEN = 32
 
 def run_client():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(0.05) 
-    
-    all_chunks = []
-    for seq_id in range(1, TOTAL_PACKETS + 1):
-        raw_str = f"Data_for_{seq_id}"
-        payload_bytes = raw_str.encode('utf-8').ljust(MAX_PAYLOAD_LEN, b'\x00')
-        b64_payload = base64.b64encode(payload_bytes)
-        header = f"{seq_id:05d}".encode('utf-8')
-        all_chunks.append(header + b64_payload)
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        client_socket.bind(('0.0.0.0', CLIENT_PORT))
+    except OSError:
+        print(f"[Error] Port {CLIENT_PORT} is busy. Please close other processes using it.")
+        return
 
-    BATCH_SIZE = 28
-    packed_batches = []
-    for i in range(0, len(all_chunks), BATCH_SIZE):
-        batch = b''.join(all_chunks[i : i + BATCH_SIZE])
-        packed_batches.append(batch)
+    print(f"[Client] Sending to Proxy at {PROXY_IP}:{PROXY_PORT} from Port {CLIENT_PORT}")
+
+    # Format: seq|timestamp|data
+    packets_data = [f"Data_Packet_{i}" for i in range(TOTAL_PACKETS)]
     
-    print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
-    
+    acked_seqs = set()
     start_time = time.time()
     
-    print("Sending data...")
-    for round_idx in range(6):
-        if round_idx >= 2:
-            random.shuffle(packed_batches)
-            
-        for b in packed_batches: 
-            sock.sendto(b, (PROXY_IP, PROXY_PORT))
-            time.sleep(0.005)
-
-    print("Data sent. Polling for FIN...")
-    ping_msg = b'PING'
-    received_fin = False
-    polling_start_time = time.time()
-    while time.time() - polling_start_time < 20.0:
-        try:
-            sock.sendto(ping_msg, (PROXY_IP, PROXY_PORT))
-            sub_start = time.time()
-            while time.time() - sub_start < 1.0:
+    while len(acked_seqs) < TOTAL_PACKETS:
+        for seq in range(TOTAL_PACKETS):
+            if seq not in acked_seqs:
+                msg = f"{seq}|{start_time}|{packets_data[seq]}"
                 try:
-                    data, _ = sock.recvfrom(2048)
-                    
-                    if b'FIN' in data:
-                        end_time = time.time()
-                        total_duration_ms = (end_time - start_time) * 1000
-                        print(f"\n[Success] FIN received!")
-                        print(f"Total Communication Time: {total_duration_ms:.3f} ms")
-                        received_fin = True
-                        break
-                        
-                except socket.timeout:
-                    break
+                    client_socket.sendto(msg.encode('utf-8'), (PROXY_IP, PROXY_PORT))
+                except OSError:
+                    pass
+
+        start_wait = time.time()
+        while time.time() - start_wait < 0.05:
+            ready = select.select([client_socket], [], [], 0.01)
+            if ready[0]:
+                try:
+                    data, _ = client_socket.recvfrom(1024)
+                    ack_msg = data.decode('utf-8')
+                    if ack_msg.startswith("ACK|"):
+                        ack_seq = int(ack_msg.split('|')[1])
+                        acked_seqs.add(ack_seq)
+                except Exception:
+                    pass
             
-            if received_fin:
+            if len(acked_seqs) == TOTAL_PACKETS:
                 break
-            
-            time.sleep(0.2)
+        
+        print(f"\r[Client] Progress: {len(acked_seqs)}/{TOTAL_PACKETS} packets acknowledged...", end="")
 
-        except Exception as e:
-            print(f"Error: {e}")
-            break
-            
-    if not received_fin:
-        print("\n[Warning] Timed out waiting for FIN.")
-        print(f"Elapsed: {(time.time() - start_time)*1000:.3f} ms")
-
-    sock.close()
+    print(f"\n[Client] Finished. All {TOTAL_PACKETS} packets acknowledged.")
+    client_socket.close()
 
 if __name__ == "__main__":
     run_client()

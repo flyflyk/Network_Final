@@ -1,73 +1,60 @@
 import socket
 import time
-import base64
 
-BIND_IP = "0.0.0.0"
-BIND_PORT = 5405
+SERVER_IP = '0.0.0.0'
+SERVER_PORT = 5405
 TOTAL_PACKETS = 100
-BLOCK_SIZE = 49 
-LEN_HEADER = 5
 
 def run_server():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8 * 1024 * 1024)
-    sock.bind((BIND_IP, BIND_PORT))
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket.bind((SERVER_IP, SERVER_PORT))
     
-    print(f"Server listening on {BIND_IP}:{BIND_PORT}")
+    print(f"[Server] Listening on {SERVER_IP}:{SERVER_PORT}")
     
-    received_data = {}
-    fin_payload = b'FIN' * 10 
-    last_client_addr = None
-
-    while len(received_data) < TOTAL_PACKETS:
+    received_packets = {}
+    start_time_from_client = None
+    
+    while len(received_packets) < TOTAL_PACKETS:
         try:
-            data, addr = sock.recvfrom(4096)
-            last_client_addr = addr
+            data, addr = server_socket.recvfrom(4096)
+            message = data.decode('utf-8')
             
-            if data.startswith(b'PING'):
+            # Format: seq|timestamp|payload
+            parts = message.split('|', 2)
+            if len(parts) < 3:
                 continue
+                
+            seq_id = int(parts[0])
+            timestamp = float(parts[1])
+            payload = parts[2]
             
-            num_chunks = len(data) // BLOCK_SIZE
-            for i in range(num_chunks):
-                start = i * BLOCK_SIZE
-                chunk = data[start : start + BLOCK_SIZE]
-                try:
-                    seq_id = int(chunk[:LEN_HEADER])
-                    if 1 <= seq_id <= TOTAL_PACKETS and seq_id not in received_data:
-                        b64_body = chunk[LEN_HEADER:]
-                        received_data[seq_id] = base64.b64decode(b64_body)
-                except ValueError:
-                    pass
-                    
+            if start_time_from_client is None:
+                start_time_from_client = timestamp
+            elif timestamp < start_time_from_client:
+                start_time_from_client = timestamp
+
+            if seq_id not in received_packets:
+                received_packets[seq_id] = payload
+                # print(f"[Server] Received seq: {seq_id}") # debug用，可註解
+
+            # ACK (ACK|seq_id)
+            ack_msg = f"ACK|{seq_id}"
+            server_socket.sendto(ack_msg.encode('utf-8'), addr)
+            
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"[Server] Error: {e}")
 
-    print(f"[Server] Collection Complete!")
-    sorted_packets = [received_data[k] for k in sorted(received_data.keys())]
-    print(f"First: {sorted_packets[0][:20]}...")
-    print(f"Last:  {sorted_packets[-1][:20]}...")
+    end_time = time.time()
     
-    if last_client_addr:
-        for _ in range(10):
-            sock.sendto(fin_payload, last_client_addr)
-            time.sleep(0.005)
+    sorted_packets = sorted(received_packets.items(), key=lambda x: x[0])
+    print("\n" + "="*30)
+    print(f"[Server] All {TOTAL_PACKETS} packets received successfully.")
+    print("="*30)
+    for seq, data in sorted_packets:
+        print(f"Seq {seq}: {data}")
 
-    sock.settimeout(15.0)
-    print("[Server] Entering FIN-WAIT state...")
-    
-    start_wait = time.time()
-    while time.time() - start_wait < 15.0:
-        try:
-            data, client_addr = sock.recvfrom(1024)
-            sock.sendto(fin_payload, client_addr)
-            sock.sendto(fin_payload, client_addr)
-            
-        except socket.timeout:
-            break
-        except Exception:
-            pass
-
-    print("Server shutting down.")
+    total_duration = end_time - start_time_from_client
+    print(f"[Result] Total Communication Time: {total_duration:.6f} seconds")
 
 if __name__ == "__main__":
     run_server()
