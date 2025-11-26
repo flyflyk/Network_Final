@@ -16,16 +16,17 @@ def run_server():
     print(f"Server listening on {BIND_IP}:{BIND_PORT}")
     
     received_data = {}
-    fin_payload = b'FIN' * 10
-    
+    fin_payload = b'FIN' * 10 
+    last_client_addr = None
+
     while len(received_data) < TOTAL_PACKETS:
         try:
             data, addr = sock.recvfrom(4096)
+            last_client_addr = addr
             
-
             if data.startswith(b'PING'):
                 continue
-
+            
             num_chunks = len(data) // BLOCK_SIZE
             for i in range(num_chunks):
                 start = i * BLOCK_SIZE
@@ -39,22 +40,26 @@ def run_server():
                     pass
                     
         except Exception as e:
-            print(f"Error receiving: {e}")
+            print(f"Error: {e}")
 
     print(f"[Server] Collection Complete!")
     sorted_packets = [received_data[k] for k in sorted(received_data.keys())]
     print(f"First: {sorted_packets[0][:20]}...")
     print(f"Last:  {sorted_packets[-1][:20]}...")
-    for _ in range(10):
-        sock.sendto(fin_payload, addr)
-        time.sleep(0.005)
-    sock.settimeout(10.0)
-    print("[Server] Entering FIN-WAIT state (10s timeout)...")
+    
+    if last_client_addr:
+        for _ in range(10):
+            sock.sendto(fin_payload, last_client_addr)
+            time.sleep(0.005)
+
+    sock.settimeout(15.0)
+    print("[Server] Entering FIN-WAIT state...")
     
     start_wait = time.time()
-    while time.time() - start_wait < 10.0:
+    while time.time() - start_wait < 15.0:
         try:
             data, client_addr = sock.recvfrom(1024)
+            sock.sendto(fin_payload, client_addr)
             sock.sendto(fin_payload, client_addr)
             
         except socket.timeout:

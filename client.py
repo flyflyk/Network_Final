@@ -12,7 +12,6 @@ def run_client():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(0.05) 
     
-    # Prepare all packets
     all_chunks = []
     for seq_id in range(1, TOTAL_PACKETS + 1):
         raw_str = f"Data_for_{seq_id}"
@@ -21,7 +20,6 @@ def run_client():
         header = f"{seq_id:05d}".encode('utf-8')
         all_chunks.append(header + b64_payload)
 
-    # Batching
     BATCH_SIZE = 28
     packed_batches = []
     for i in range(0, len(all_chunks), BATCH_SIZE):
@@ -32,45 +30,43 @@ def run_client():
     
     start_time = time.time()
     
-    # Sequential + Reverse + Random
-    for b in packed_batches:
-        sock.sendto(b, (PROXY_IP, PROXY_PORT))
-        time.sleep(0.002)
-    for b in packed_batches:
-        sock.sendto(b, (PROXY_IP, PROXY_PORT))
-        time.sleep(0.002)
-    for b in reversed(packed_batches):
-        sock.sendto(b, (PROXY_IP, PROXY_PORT))
-        time.sleep(0.002)
-    for b in reversed(packed_batches):
-        sock.sendto(b, (PROXY_IP, PROXY_PORT))
-        time.sleep(0.002)
-    for _ in range(2):
-        random.shuffle(packed_batches)
-        for b in packed_batches:
+    print("Sending data...")
+    for round_idx in range(6):
+        if round_idx >= 2:
+            random.shuffle(packed_batches)
+            
+        for b in packed_batches: 
             sock.sendto(b, (PROXY_IP, PROXY_PORT))
-            time.sleep(0.002)
+            time.sleep(0.005)
 
-    # Handshake
     print("Data sent. Polling for FIN...")
     ping_msg = b'PING'
     received_fin = False
-    sock.settimeout(0.5)
-    for i in range(20):
+    polling_start_time = time.time()
+    while time.time() - polling_start_time < 20.0:
         try:
             sock.sendto(ping_msg, (PROXY_IP, PROXY_PORT))
-            data, _ = sock.recvfrom(1024)
-            if b'FIN' in data:
-                end_time = time.time()
-                total_duration_ms = (end_time - start_time) * 1000
-                
-                print(f"\n[Success] FIN received!")
-                print(f"Total Communication Time: {total_duration_ms:.3f} ms")
-                received_fin = True
+            sub_start = time.time()
+            while time.time() - sub_start < 1.0:
+                try:
+                    data, _ = sock.recvfrom(2048)
+                    
+                    if b'FIN' in data:
+                        end_time = time.time()
+                        total_duration_ms = (end_time - start_time) * 1000
+                        print(f"\n[Success] FIN received!")
+                        print(f"Total Communication Time: {total_duration_ms:.3f} ms")
+                        received_fin = True
+                        break
+                        
+                except socket.timeout:
+                    break
+            
+            if received_fin:
                 break
-        except socket.timeout:
-            print(f"Retry polling ({i+1}/20)...")
-            continue
+            
+            time.sleep(0.2)
+
         except Exception as e:
             print(f"Error: {e}")
             break
@@ -80,7 +76,6 @@ def run_client():
         print(f"Elapsed: {(time.time() - start_time)*1000:.3f} ms")
 
     sock.close()
-
 
 if __name__ == "__main__":
     run_client()
