@@ -33,13 +33,23 @@ def run_client():
     start_time = time.time()
     
     # Sequential + Reverse + Random
-    for b in packed_batches: sock.sendto(b, (PROXY_IP, PROXY_PORT))
-    for b in packed_batches: sock.sendto(b, (PROXY_IP, PROXY_PORT))
-    for b in reversed(packed_batches): sock.sendto(b, (PROXY_IP, PROXY_PORT))
-    for b in reversed(packed_batches): sock.sendto(b, (PROXY_IP, PROXY_PORT))
+    for b in packed_batches:
+        sock.sendto(b, (PROXY_IP, PROXY_PORT))
+        time.sleep(0.002)
+    for b in packed_batches:
+        sock.sendto(b, (PROXY_IP, PROXY_PORT))
+        time.sleep(0.002)
+    for b in reversed(packed_batches):
+        sock.sendto(b, (PROXY_IP, PROXY_PORT))
+        time.sleep(0.002)
+    for b in reversed(packed_batches):
+        sock.sendto(b, (PROXY_IP, PROXY_PORT))
+        time.sleep(0.002)
     for _ in range(2):
         random.shuffle(packed_batches)
-        for b in packed_batches: sock.sendto(b, (PROXY_IP, PROXY_PORT))
+        for b in packed_batches:
+            sock.sendto(b, (PROXY_IP, PROXY_PORT))
+            time.sleep(0.002)
 
     # Handshake
     ping_msg = b'PING'
@@ -47,6 +57,7 @@ def run_client():
     for _ in range(100):
         try:
             sock.sendto(ping_msg, (PROXY_IP, PROXY_PORT))
+            time.sleep(0.01)
             
             # Read FIN
             data, _ = sock.recvfrom(1024)

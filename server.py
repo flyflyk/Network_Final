@@ -1,5 +1,6 @@
 import socket
 import base64
+import time
 
 BIND_IP = "0.0.0.0"
 BIND_PORT = 5405
@@ -41,11 +42,13 @@ def run_server():
                     collect_fin = True
                     sorted_packets = [received_data[k] for k in sorted(received_data.keys())]
                     print(f"[Server] Received all {TOTAL_PACKETS} packets.")
-                    print(f"First: {sorted_packets[0][:10]}... Last: {sorted_packets[-1][:10]}...")
+                    print(f"First: {sorted_packets[0][:20]}...") 
+                    print(f"Last:  {sorted_packets[-1][:20]}...")
 
             if collect_fin:
                 for _ in range(5):
                     sock.sendto(fin_payload, addr)
+                    time.sleep(0.002)
 
         except Exception as e:
             print(f"Error: {e}")
