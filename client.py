@@ -1,9 +1,13 @@
 import socket
 import time
 import select
+import os
+from dotenv import load_dotenv
 
-CLIENT_IP = '20.196.152.54' 
-PROXY_IP = '20.243.17.90'
+load_dotenv()
+
+CLIENT_IP = os.getenv('CLIENT_IP', '20.196.152.54')
+PROXY_IP = os.getenv('PROXY_IP', '20.243.17.90')
 PROXY_PORT = 5405
 CLIENT_PORT = 5405
 TOTAL_PACKETS = 100

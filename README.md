@@ -1,27 +1,51 @@
-### Software
-- **OS:** Ubuntu24.04
+## Environment Setting
 
-### Usage
+### 1. Dependencies
 
-1.  **Start Server**
-    Run on the first machine:
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Set up envirionment variable
+
+1.  Copy `.env.example` and rename as `.env`.
+2.  Modify IP in `.env`.
+
+## Usage
+
+### 1. Launch Server
+
+```bash
+python server.py
+```
+
+### 2. Launch Proxy
+
+*   **10% packets dropped Proxy:**
     ```bash
-    python3 server.py
+    # On Windows
+    proxy_drop_10%.exe
+    # On Linux/macOS
+    ./proxy_drop_10%
     ```
 
-2.  **Start Proxy**
-    Run on the second machine:
-    ```console
-    chmod +x final_proxy
+*   **10% packets delayed Proxy:**
+    ```bash
+    # On Windows
+    proxy_delay_10%.exe
+    # On Linux/macOS
+    ./proxy_delay_10%
+    ```
+
+*   **Final Proxy:**
+    ```bash
+    # On Windows
+    final_proxy.exe
+    # On Linux/macOS
     ./final_proxy
-    Server IP: <SERVER_IP_ADDRESS>
     ```
+### 3. Launch Client
 
-3.  **Start Client**
-    Modify the IP in `client.py` and run on the third machine:
-    ```bash
-    python3 client.py
-    ```
-
----
-
+```bash
+python client.py
+```
