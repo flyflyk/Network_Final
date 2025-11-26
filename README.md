@@ -21,6 +21,10 @@ python server.py
 
 ### 2. Launch Proxy
 
+```bash
+chmod +x proxy_drop_10% proxy_delay_10% final_proxy
+```
+
 *   **10% packets dropped Proxy:**
     ```bash
     # On Windows
