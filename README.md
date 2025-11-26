@@ -1,55 +1,59 @@
-## Environment Setting
+## Setup
 
-### 1. Dependencies
+### 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Set up envirionment variable
+### 2. Configure Environment
 
-1.  Copy `.env.example` and rename as `.env`.
-2.  Modify IP in `.env`.
+Copy the example `.env.example` file to `.env` and modify it with your IP addresses.
+
+```bash
+cp .env.example .env
+```
+
+**`.env` file:**
+```dotenv
+CLIENT_IP=127.0.0.1
+PROXY_IP=127.0.0.1
+```
 
 ## Usage
 
-### 1. Launch Server
+Run the services in separate terminals in the following order.
+
+### 1. Start Server
+
+The server listens for UDP packets on port `5405`.
 
 ```bash
 python server.py
 ```
 
-### 2. Launch Proxy
+### 2. Start Proxy
 
-```bash
-chmod +x proxy_drop_10% proxy_delay_10% final_proxy
-```
+The proxy forwards packets between the client and server. The proxy executables may require execute permissions (`chmod +x <filename>`).
 
-*   **10% packets dropped Proxy:**
-    ```bash
-    # On Windows
-    proxy_drop_10%.exe
-    # On Linux/macOS
-    ./proxy_drop_10%
-    ```
+*   `./proxy_drop_10%` (Drops 10% of packets)
+*   `./proxy_delay_10%` (Delays 10% of packets)
+*   `./final_proxy` (Final version)
 
-*   **10% packets delayed Proxy:**
-    ```bash
-    # On Windows
-    proxy_delay_10%.exe
-    # On Linux/macOS
-    ./proxy_delay_10%
-    ```
+*(Use `.exe` extension on Windows, e.g., `proxy_drop_10%.exe`)*
 
-*   **Final Proxy:**
-    ```bash
-    # On Windows
-    final_proxy.exe
-    # On Linux/macOS
-    ./final_proxy
-    ```
-### 3. Launch Client
+### 3. Start Client
+
+The client reads the `.env` config and sends 100 packets to the proxy.
 
 ```bash
 python client.py
+```
+
+### 4. Run Ping Test
+
+`ping.py` sends a single packet to measure the Round Trip Time (RTT).
+
+```bash
+python ping.py
 ```
