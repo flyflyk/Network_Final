@@ -52,14 +52,13 @@ def run_client():
             time.sleep(0.002)
 
     # Handshake
+    print("Data sent. Polling for FIN...")
     ping_msg = b'PING'
     received_fin = False
-    for _ in range(100):
+    sock.settimeout(0.5)
+    for i in range(20):
         try:
             sock.sendto(ping_msg, (PROXY_IP, PROXY_PORT))
-            time.sleep(0.01)
-            
-            # Read FIN
             data, _ = sock.recvfrom(1024)
             if b'FIN' in data:
                 end_time = time.time()
@@ -70,6 +69,7 @@ def run_client():
                 received_fin = True
                 break
         except socket.timeout:
+            print(f"Retry polling ({i+1}/20)...")
             continue
         except Exception as e:
             print(f"Error: {e}")
@@ -80,6 +80,7 @@ def run_client():
         print(f"Elapsed: {(time.time() - start_time)*1000:.3f} ms")
 
     sock.close()
+
 
 if __name__ == "__main__":
     run_client()

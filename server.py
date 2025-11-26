@@ -1,11 +1,11 @@
 import socket
-import base64
 import time
+import base64
 
 BIND_IP = "0.0.0.0"
 BIND_PORT = 5405
 TOTAL_PACKETS = 100
-BLOCK_SIZE = 49 # Format: [ID(5 bytes)] + [Base64_Data(44 bytes)] = 49 bytes
+BLOCK_SIZE = 49 
 LEN_HEADER = 5
 
 def run_server():
@@ -17,44 +17,52 @@ def run_server():
     
     received_data = {}
     fin_payload = b'FIN' * 10
-    collect_fin = False
-
-    while True:
+    
+    while len(received_data) < TOTAL_PACKETS:
         try:
             data, addr = sock.recvfrom(4096)
-            if not collect_fin:
-                if not data.startswith(b'PING'):
-                    # Batch unpacking
-                    num_chunks = len(data) // BLOCK_SIZE
-                    for i in range(num_chunks):
-                        start = i * BLOCK_SIZE
-                        chunk = data[start : start + BLOCK_SIZE]
-                        try:
-                            seq_id = int(chunk[:LEN_HEADER])
-                            if 1 <= seq_id <= TOTAL_PACKETS:
-                                if seq_id not in received_data:
-                                    b64_body = chunk[LEN_HEADER:]
-                                    received_data[seq_id] = base64.b64decode(b64_body)
-                        except ValueError:
-                            pass
-                
-                if len(received_data) == TOTAL_PACKETS:
-                    collect_fin = True
-                    sorted_packets = [received_data[k] for k in sorted(received_data.keys())]
-                    print(f"[Server] Received all {TOTAL_PACKETS} packets.")
-                    print(f"First: {sorted_packets[0][:20]}...") 
-                    print(f"Last:  {sorted_packets[-1][:20]}...")
+            
 
-            if collect_fin:
-                for _ in range(5):
-                    sock.sendto(fin_payload, addr)
-                    time.sleep(0.002)
+            if data.startswith(b'PING'):
+                continue
 
+            num_chunks = len(data) // BLOCK_SIZE
+            for i in range(num_chunks):
+                start = i * BLOCK_SIZE
+                chunk = data[start : start + BLOCK_SIZE]
+                try:
+                    seq_id = int(chunk[:LEN_HEADER])
+                    if 1 <= seq_id <= TOTAL_PACKETS and seq_id not in received_data:
+                        b64_body = chunk[LEN_HEADER:]
+                        received_data[seq_id] = base64.b64decode(b64_body)
+                except ValueError:
+                    pass
+                    
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error receiving: {e}")
+
+    print(f"[Server] Collection Complete!")
+    sorted_packets = [received_data[k] for k in sorted(received_data.keys())]
+    print(f"First: {sorted_packets[0][:20]}...")
+    print(f"Last:  {sorted_packets[-1][:20]}...")
+    for _ in range(10):
+        sock.sendto(fin_payload, addr)
+        time.sleep(0.005)
+    sock.settimeout(10.0)
+    print("[Server] Entering FIN-WAIT state (10s timeout)...")
+    
+    start_wait = time.time()
+    while time.time() - start_wait < 10.0:
+        try:
+            data, client_addr = sock.recvfrom(1024)
+            sock.sendto(fin_payload, client_addr)
+            
+        except socket.timeout:
+            break
+        except Exception:
+            pass
+
+    print("Server shutting down.")
 
 if __name__ == "__main__":
-    try:
-        run_server()
-    except KeyboardInterrupt:
-        pass
+    run_server()
