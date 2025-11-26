@@ -60,7 +60,7 @@ def run_client():
     total_duration = end_time - start_time
 
     print(f"\n[Client] Success! All packets acknowledged.")
-    print(f"[Result] Total Communication Time: {total_duration:.6f} seconds")
+    print(f"[Result] Total Communication Time: {total_duration * 1000:.2f} ms")
     client_socket.close()
 
 if __name__ == "__main__":
