@@ -10,10 +10,9 @@ MAX_PAYLOAD_LEN = 32
 
 def run_client():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(0.02)
+    sock.settimeout(0.05) 
     
-    # Prepare all chunks
-    # Format: [ID 5 bytes][Base64 Payload 44 bytes]
+    # Prepare all packets
     all_chunks = []
     for seq_id in range(1, TOTAL_PACKETS + 1):
         raw_str = f"Data_for_{seq_id}"
@@ -22,47 +21,53 @@ def run_client():
         header = f"{seq_id:05d}".encode('utf-8')
         all_chunks.append(header + b64_payload)
 
-    # Chunk packing
+    # Batching
     BATCH_SIZE = 28
     packed_batches = []
-    
     for i in range(0, len(all_chunks), BATCH_SIZE):
         batch = b''.join(all_chunks[i : i + BATCH_SIZE])
         packed_batches.append(batch)
     
     print(f"Targeting Proxy: {PROXY_IP}:{PROXY_PORT}")
-    print(f"Total Batches per round: {len(packed_batches)}")
-
+    
     start_time = time.time()
     
-    # Sequential -> Reverse -> Random
-    for batch in packed_batches:
-        sock.sendto(batch, (PROXY_IP, PROXY_PORT))
-    for batch in reversed(packed_batches):
-        sock.sendto(batch, (PROXY_IP, PROXY_PORT))
-    random.shuffle(packed_batches)
-    for batch in packed_batches:
-        sock.sendto(batch, (PROXY_IP, PROXY_PORT))
+    # Sequential + Reverse + Random
+    for b in packed_batches: sock.sendto(b, (PROXY_IP, PROXY_PORT))
+    for b in packed_batches: sock.sendto(b, (PROXY_IP, PROXY_PORT))
+    for b in reversed(packed_batches): sock.sendto(b, (PROXY_IP, PROXY_PORT))
+    for b in reversed(packed_batches): sock.sendto(b, (PROXY_IP, PROXY_PORT))
+    for _ in range(2):
+        random.shuffle(packed_batches)
+        for b in packed_batches: sock.sendto(b, (PROXY_IP, PROXY_PORT))
 
-    print("Polling for FIN...")
+    # Handshake
     ping_msg = b'PING'
-    fin_received = False
-    for _ in range(200):
-        sock.sendto(ping_msg, (PROXY_IP, PROXY_PORT))
+    received_fin = False
+    for _ in range(100):
         try:
+            sock.sendto(ping_msg, (PROXY_IP, PROXY_PORT))
+            
+            # Read FIN
             data, _ = sock.recvfrom(1024)
             if b'FIN' in data:
-                total_time = (time.time() - start_time) * 1000
+                end_time = time.time()
+                total_duration_ms = (end_time - start_time) * 1000
+                
                 print(f"\n[Success] FIN received!")
-                print(f"Total End-to-End Latency: {total_time:.3f} ms")
-                fin_received = True
+                print(f"Total Communication Time: {total_duration_ms:.3f} ms")
+                received_fin = True
                 break
         except socket.timeout:
             continue
+        except Exception as e:
+            print(f"Error: {e}")
+            break
             
-    if not fin_received:
-        print("Timeout waiting for FIN.")
-        
+    if not received_fin:
+        print("\n[Warning] Timed out waiting for FIN.")
+        print(f"Elapsed: {(time.time() - start_time)*1000:.3f} ms")
+
     sock.close()
 
 if __name__ == "__main__":
