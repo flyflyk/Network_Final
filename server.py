@@ -20,13 +20,15 @@ def run_server():
             data, addr = server_socket.recvfrom(4096)
             message = data.decode('utf-8')
             
-            parts = message.split('|', 2)
-            if len(parts) < 3:
+            # Format: CLIENT_IP|SEQ|TIMESTAMP|DATA
+            parts = message.split('|', 3)
+            if len(parts) < 4:
                 continue
                 
-            seq_id = int(parts[0])
-            timestamp = float(parts[1])
-            payload = parts[2]
+            client_ip_from_msg = parts[0]
+            seq_id = int(parts[1])
+            timestamp = float(parts[2])
+            payload = parts[3]
             
             if start_time_from_client is None or timestamp < start_time_from_client:
                 start_time_from_client = timestamp
@@ -35,7 +37,8 @@ def run_server():
                 received_packets[seq_id] = payload
 
             ack_msg = f"ACK|{seq_id}"
-            server_socket.sendto(ack_msg.encode('utf-8'), addr)
+            client_addr = (client_ip_from_msg, SERVER_PORT)
+            server_socket.sendto(ack_msg.encode('utf-8'), client_addr)
             
         except BlockingIOError:
             continue
@@ -59,11 +62,16 @@ def run_server():
             last_packet_time = time.time()
             
             message = data.decode('utf-8')
-            parts = message.split('|', 1)
-            seq_id = int(parts[0])
+            parts = message.split('|', 3)
+            if len(parts) < 4:
+                continue
+
+            client_ip_from_msg = parts[0]
+            seq_id = int(parts[1])
             
             ack_msg = f"ACK|{seq_id}"
-            server_socket.sendto(ack_msg.encode('utf-8'), addr)
+            client_addr = (client_ip_from_msg, SERVER_PORT)
+            server_socket.sendto(ack_msg.encode('utf-8'), client_addr)
             
         except BlockingIOError:
             pass

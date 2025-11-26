@@ -2,6 +2,7 @@ import socket
 import time
 import select
 
+CLIENT_IP = '20.196.152.54' 
 PROXY_IP = '20.243.17.90'
 PROXY_PORT = 5405
 CLIENT_PORT = 5405
@@ -18,6 +19,7 @@ def run_client():
     client_socket.setblocking(False)
 
     print(f"[Client] Sending to Proxy at {PROXY_IP}:{PROXY_PORT}")
+    print(f"[Client] My return address is {CLIENT_IP}:{CLIENT_PORT}")
 
     packets_data = [f"Data_{i}" for i in range(TOTAL_PACKETS)]
     acked_seqs = set()
@@ -26,7 +28,8 @@ def run_client():
     while len(acked_seqs) < TOTAL_PACKETS:
         for seq in range(TOTAL_PACKETS):
             if seq not in acked_seqs:
-                msg = f"{seq}|{start_time}|{packets_data[seq]}"
+                # Format: CLIENT_IP|SEQ|TIMESTAMP|DATA
+                msg = f"{CLIENT_IP}|{seq}|{start_time}|{packets_data[seq]}"
                 try:
                     client_socket.sendto(msg.encode('utf-8'), (PROXY_IP, PROXY_PORT))
                 except BlockingIOError:
