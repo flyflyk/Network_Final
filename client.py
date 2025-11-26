@@ -52,7 +52,11 @@ def run_client():
         
         print(f"\r[Client] Progress: {len(acked_seqs)}/{TOTAL_PACKETS}", end="")
 
+    end_time = time.time()
+    total_duration = end_time - start_time
+
     print(f"\n[Client] Success! All packets acknowledged.")
+    print(f"[Result] Total Communication Time: {total_duration:.6f} seconds")
     client_socket.close()
 
 if __name__ == "__main__":

@@ -13,7 +13,6 @@ def run_server():
     print(f"[Server] Listening on {SERVER_IP}:{SERVER_PORT}")
     
     received_packets = {}
-    start_time_from_client = None
     
     while len(received_packets) < TOTAL_PACKETS:
         try:
@@ -27,12 +26,8 @@ def run_server():
                 
             client_ip_from_msg = parts[0]
             seq_id = int(parts[1])
-            timestamp = float(parts[2])
             payload = parts[3]
             
-            if start_time_from_client is None or timestamp < start_time_from_client:
-                start_time_from_client = timestamp
-
             if seq_id not in received_packets:
                 received_packets[seq_id] = payload
 
@@ -45,12 +40,8 @@ def run_server():
         except Exception as e:
             print(f"[Server] Error: {e}")
 
-    end_time = time.time()
-    total_duration = end_time - start_time_from_client
-    
     print("\n" + "="*30)
     print(f"[Server] All {TOTAL_PACKETS} packets collected.")
-    print(f"[Result] Total Communication Time: {total_duration:.6f} seconds")
     print(f"[Server] Entering Teardown Phase...")
     print("="*30)
    
@@ -83,7 +74,11 @@ def run_server():
             break
             
     sorted_packets = sorted(received_packets.items(), key=lambda x: x[0])
-    print(f"[Server] Final check: {len(sorted_packets)} packets sorted.")
+    print(f"\n[Server] Verification: {len(sorted_packets)} packets sorted successfully.")
+    print("-" * 30)
+    for seq, payload in sorted_packets:
+        print(f"  Packet {seq}: {payload}")
+    print("-" * 30)
 
 if __name__ == "__main__":
     run_server()
