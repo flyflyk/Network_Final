@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from rich.live import Live
 from rich.table import Table
 from rich.panel import Panel
+from rich.layout import Layout
 from rich.console import Console
 
 load_dotenv()
@@ -17,7 +18,8 @@ CLIENT_PORT = 5405
 TOTAL_PACKETS = 100
 FPS = 20
 
-def create_client_dashboard(acked_seqs, start_time):
+def create_client_dashboard(acked_seqs, start_time, is_finished=False, total_time=0):
+    # ACK grid
     grid = Table(show_header=False, show_edge=False, box=None, padding=0, expand=True)
     for _ in range(10):
         grid.add_column(justify="center")
@@ -35,12 +37,33 @@ def create_client_dashboard(acked_seqs, start_time):
                 cells.append(" ")
         grid.add_row(*cells)
 
-    duration = time.time() - start_time
-    stats = f"[bold]Sending to:[/bold] {PROXY_IP}\n" \
-            f"[bold]Progress:[/bold] {len(acked_seqs)}/{TOTAL_PACKETS}\n" \
-            f"[bold]Time Elapsed:[/bold] {duration * 1000:.0f} ms"
+    # State
+    if is_finished:
+        status_color = "bold green"
+        status_text = "COMPLETED"
+        duration_ms = total_time * 1000
+        footer = "[blink]Press Ctrl+C to exit[/blink]"
+    else:
+        status_color = "bold yellow"
+        status_text = "SENDING..."
+        duration_ms = (time.time() - start_time) * 1000
+        footer = "Waiting for ACKs..."
 
-    return Panel(grid, title=f"Client ACK Status ({stats})", border_style="magenta")
+    progress_pct = int((len(acked_seqs) / TOTAL_PACKETS) * 100)
+
+    # Info panel
+    info_text = f"Target: {PROXY_IP}\n\n" \
+                f"Status: [{status_color}]{status_text}[/{status_color}]\n" \
+                f"Progress: {len(acked_seqs)}/{TOTAL_PACKETS} ({progress_pct}%)\n" \
+                f"Time: [bold white]{duration_ms:.0f} ms[/bold white]\n\n" \
+                f"{footer}"
+
+    layout = Layout()
+    layout.split_row(
+        Layout(Panel(grid, title="[magenta]ACK Status[/magenta]", border_style="magenta"), ratio=2),
+        Layout(Panel(info_text, title="Client Info", border_style="white"), ratio=1)
+    )
+    return layout
 
 def run_client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -70,6 +93,7 @@ def run_client():
                     except BlockingIOError:
                         pass 
             
+            # Receive ACKs
             ready = select.select([client_socket], [], [], 0.05)
             if ready[0]:
                 try:
@@ -79,19 +103,24 @@ def run_client():
                         if ack_msg.startswith("ACK|"):
                             ack_seq = int(ack_msg.split('|')[1])
                             acked_seqs.add(ack_seq)
-                            live.update(create_client_dashboard(acked_seqs, start_time))
                 except BlockingIOError:
                     pass
                 except Exception:
                     pass
-
+            
             live.update(create_client_dashboard(acked_seqs, start_time))
 
-    end_time = time.time()
-    total_duration = end_time - start_time
-
-    console.print(f"\n[bold green][Client] Success! All packets acknowledged.[/bold green]")
-    console.print(f"[bold yellow][Result] Total Communication Time: {total_duration * 1000:.2f} ms[/bold yellow]")
+        end_time = time.time()
+        total_duration = end_time - start_time
+        final_layout = create_client_dashboard(acked_seqs, start_time, is_finished=True, total_time=total_duration)
+        live.update(final_layout)
+        
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+            
     client_socket.close()
 
 if __name__ == "__main__":
