@@ -16,10 +16,22 @@ PROXY_IP = os.getenv('PROXY_IP', '127.0.0.1')
 PROXY_PORT = 5405
 CLIENT_PORT = 5405
 TOTAL_PACKETS = 100
-FPS = 20
+FPS = 30
+
+HEART_BITMAP = [
+    0, 0, 1, 1, 0, 0, 1, 1, 0, 0,  # Row 0
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 0,  # Row 1
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # Row 2
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # Row 3
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  # Row 4
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 0,  # Row 5
+    0, 0, 1, 1, 1, 1, 1, 1, 0, 0,  # Row 6
+    0, 0, 0, 1, 1, 1, 1, 0, 0, 0,  # Row 7
+    0, 0, 0, 0, 1, 1, 0, 0, 0, 0,  # Row 8
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0   # Row 9
+]
 
 def create_client_dashboard(acked_seqs, start_time, is_finished=False, total_time=0):
-    # ACK grid
     grid = Table(show_header=False, show_edge=False, box=None, padding=0, expand=True)
     for _ in range(10):
         grid.add_column(justify="center")
@@ -37,30 +49,28 @@ def create_client_dashboard(acked_seqs, start_time, is_finished=False, total_tim
                 cells.append(" ")
         grid.add_row(*cells)
 
-    # State
     if is_finished:
         status_color = "bold green"
-        status_text = "COMPLETED"
+        status_text = "SENT & CONFIRMED"
         duration_ms = total_time * 1000
         footer = "[blink]Press Ctrl+C to exit[/blink]"
     else:
         status_color = "bold yellow"
-        status_text = "SENDING..."
+        status_text = "UPLOADING..."
         duration_ms = (time.time() - start_time) * 1000
         footer = "Waiting for ACKs..."
 
-    progress_pct = int((len(acked_seqs) / TOTAL_PACKETS) * 100)
-
-    # Info panel
+    progress = len(acked_seqs)
+    
     info_text = f"Target: {PROXY_IP}\n\n" \
                 f"Status: [{status_color}]{status_text}[/{status_color}]\n" \
-                f"Progress: {len(acked_seqs)}/{TOTAL_PACKETS} ({progress_pct}%)\n" \
+                f"Progress: {progress}/{TOTAL_PACKETS}\n" \
                 f"Time: [bold white]{duration_ms:.0f} ms[/bold white]\n\n" \
                 f"{footer}"
 
     layout = Layout()
     layout.split_row(
-        Layout(Panel(grid, title="[magenta]ACK Status[/magenta]", border_style="magenta"), ratio=2),
+        Layout(Panel(grid, title="[magenta]Upload Status[/magenta]", border_style="magenta"), ratio=2),
         Layout(Panel(info_text, title="Client Info", border_style="white"), ratio=1)
     )
     return layout
@@ -74,8 +84,8 @@ def run_client():
         return
 
     client_socket.setblocking(False)
-
-    packets_data = [f"Data_{i}" for i in range(TOTAL_PACKETS)]
+    packets_data = [str(bit) for bit in HEART_BITMAP]
+    
     acked_seqs = set()
     start_time = time.time()
     
@@ -103,6 +113,7 @@ def run_client():
                         if ack_msg.startswith("ACK|"):
                             ack_seq = int(ack_msg.split('|')[1])
                             acked_seqs.add(ack_seq)
+                            live.update(create_client_dashboard(acked_seqs, start_time))
                 except BlockingIOError:
                     pass
                 except Exception:
@@ -112,6 +123,7 @@ def run_client():
 
         end_time = time.time()
         total_duration = end_time - start_time
+        
         final_layout = create_client_dashboard(acked_seqs, start_time, is_finished=True, total_time=total_duration)
         live.update(final_layout)
         
