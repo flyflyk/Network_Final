@@ -5,6 +5,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.layout import Layout
 from rich.console import Console
+from rich.align import Align
 
 SERVER_IP = '0.0.0.0'
 SERVER_PORT = 5405
@@ -12,7 +13,8 @@ TOTAL_PACKETS = 100
 FPS = 30
 
 def create_dashboard(received_packets, status_log):
-    grid = Table(show_header=False, show_edge=False, box=None, padding=0, expand=True)
+    grid = Table(show_header=False, show_edge=False, box=None, padding=(0, 0), expand=False)
+    
     for _ in range(10):
         grid.add_column(justify="center", width=2)
 
@@ -34,7 +36,6 @@ def create_dashboard(received_packets, status_log):
                 cells.append("  ")
         grid.add_row(*cells)
 
-    # Info Panel
     count = len(received_packets)
     progress_color = "green" if count == TOTAL_PACKETS else "yellow"
     
@@ -44,9 +45,10 @@ def create_dashboard(received_packets, status_log):
                    f"{'-'*20}\n" \
                    f"{status_log}"
 
+    grid_panel_content = Align.center(grid, vertical="middle")
     layout = Layout()
     layout.split_row(
-        Layout(Panel(grid, title="[bold yellow]Image Reconstruction[/bold yellow]", border_style="blue"), ratio=2),
+        Layout(Panel(grid_panel_content, title="[bold yellow]Image Reconstruction[/bold yellow]", border_style="blue"), ratio=2),
         Layout(Panel(info_content, title="[bold white]System Log[/bold white]", border_style="white"), ratio=1)
     )
     return layout
@@ -106,7 +108,7 @@ def run_server():
                 message = data.decode('utf-8')
                 parts = message.split('|', 3)
                 if len(parts) < 4: continue
-
+                
                 ack_msg = f"ACK|{int(parts[1])}"
                 server_socket.sendto(ack_msg.encode('utf-8'), (parts[0], SERVER_PORT))
             except:
@@ -115,7 +117,6 @@ def run_server():
             if time.time() - last_packet_time > 2.0:
                 break
         
-        # Keep the final image
         final_msg = f"[bold green]✔ RECONSTRUCTION OK[/bold green]\n\n" \
                     f"Sorted: 100%\n" \
                     f"Loss: 0%\n\n" \
