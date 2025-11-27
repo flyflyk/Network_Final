@@ -59,7 +59,7 @@ The client reads the `.env` config and sends 100 packets to the proxy.
 python client.py
 ```
 
-### 4. Run Ping Test
+### 4. Run Ping Test (Optional)
 
 `ping.py` sends a single packet to measure the Round Trip Time (RTT).
 
