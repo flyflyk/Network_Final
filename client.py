@@ -104,7 +104,7 @@ def run_client():
                         pass 
             
             # Receive ACKs
-            ready = select.select([client_socket], [], [], 0.05)
+            ready = select.select([client_socket], [], [], 0.001)
             if ready[0]:
                 try:
                     while True:
@@ -113,7 +113,6 @@ def run_client():
                         if ack_msg.startswith("ACK|"):
                             ack_seq = int(ack_msg.split('|')[1])
                             acked_seqs.add(ack_seq)
-                            live.update(create_client_dashboard(acked_seqs, start_time))
                 except BlockingIOError:
                     pass
                 except Exception:
