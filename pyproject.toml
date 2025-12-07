@@ -26,10 +26,13 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B"]
-ignore = []
+select = ["E", "F", "I", "B", "N", "D", "ERA"]
+ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107", "E501"]
 fixable = ["ALL"]
 unfixable = []
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.format]
 quote-style = "double"
